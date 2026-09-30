@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" data-view="gallery">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Road Annotator</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ══ GALLERY ══════════════════════════════════════════════════════════ -->
+<section id="gallery-view">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark"></span>
+      Road Annotator
+    </div>
+
+    <div class="progress-summary" id="summary">
+      <span class="chip" data-state="approved"><i></i><b id="c-approved">0</b> approved</span>
+      <span class="chip" data-state="edited"><i></i><b id="c-edited">0</b> edited</span>
+      <span class="chip" data-state="auto"><i></i><b id="c-auto">0</b> auto</span>
+      <span class="chip" data-state="unannotated"><i></i><b id="c-unannotated">0</b> pending</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="model-state" id="model-state" title="Segmentation model">
+      <span class="dot"></span><span id="model-label">starting…</span>
+    </div>
+
+    <button class="btn" id="btn-upload">Add images</button>
+    <button class="btn btn-primary" id="btn-annotate">Auto-annotate all</button>
+    <button class="btn" id="btn-export">Export CVAT</button>
+    <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.bmp,.webp" hidden>
+  </header>
+
+  <div class="job-bar" id="job-bar" hidden>
+    <div class="job-track"><div class="job-fill" id="job-fill"></div></div>
+    <span id="job-text">Annotating…</span>
+    <button class="btn btn-small" id="btn-cancel-job">Cancel</button>
+  </div>
+
+  <div class="gallery-toolbar">
+    <div class="filters" id="filters">
+      <button class="filter is-active" data-filter="all">All</button>
+      <button class="filter" data-filter="unannotated">Pending</button>
+      <button class="filter" data-filter="auto">Auto</button>
+      <button class="filter" data-filter="edited">Edited</button>
+      <button class="filter" data-filter="approved">Approved</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="hint" id="gallery-hint"></span>
+  </div>
+
+  <main class="grid" id="grid"></main>
+
+  <div class="dropzone" id="dropzone"><div>Drop images to add them</div></div>
+</section>
+
+
+<!-- ══ EDITOR ═══════════════════════════════════════════════════════════ -->
+<section id="editor-view">
+  <header class="topbar">
+    <button class="btn btn-ghost" id="btn-back">‹ Gallery</button>
+    <div class="image-title" id="editor-title">—</div>
+    <span class="counter" id="editor-counter"></span>
+    <span class="save-state" id="save-state" data-dirty="false">saved</span>
+
+    <div class="spacer"></div>
+
+    <button class="btn btn-small" id="btn-revert" title="Discard edits, restore the AI polygon">Revert to AI</button>
+    <button class="btn btn-small" id="btn-rerun" title="Re-run this image with the tuning values">Re-run</button>
+    <button class="btn btn-approve" id="btn-approve">✓ Approve <kbd>A</kbd></button>
+  </header>
+
+  <div class="editor-body">
+    <nav class="rail" id="rail">
+      <button class="tool is-active" data-tool="select" title="Select and edit (V)">
+        <svg viewBox="0 0 20 20"><path d="M4 2l12 7-5 1.5L8.5 16z"/></svg>
+      </button>
+      <button class="tool" data-tool="pan" title="Pan (H, or hold Space)">
+        <svg viewBox="0 0 20 20"><path d="M10 2v8M6 4v7M14 5v6M3 9c0 5 3 9 7 9s7-4 7-9"/></svg>
+      </button>
+      <button class="tool" data-tool="draw" title="Draw a new polygon (N)">
+        <svg viewBox="0 0 20 20"><path d="M10 2l7 5-2.5 8h-9L3 7z"/></svg>
+      </button>
+      <div class="rail-gap"></div>
+      <button class="tool" id="btn-undo" title="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 20 20"><path d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10h-2"/></svg>
+      </button>
+      <button class="tool" id="btn-redo" title="Redo (Ctrl+Y)">
+        <svg viewBox="0 0 20 20"><path d="M13 5l4 4-4 4M17 9H8a5 5 0 000 10h2"/></svg>
+      </button>
+      <div class="rail-gap"></div>
+      <button class="tool" id="btn-fit" title="Fit to screen (F)">
+        <svg viewBox="0 0 20 20"><path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/></svg>
+      </button>
+    </nav>
+
+    <div class="stage" id="stage">
+      <canvas id="canvas"></canvas>
+      <div class="stage-overlay" id="stage-overlay"></div>
+      <div class="zoom-badge" id="zoom-badge">100%</div>
+      <div class="draw-hint" id="draw-hint" hidden>
+        Click to place points · <b>Enter</b> to finish · <b>Esc</b> to cancel
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="panel-block">
+        <h3>Classes</h3>
+        <div id="class-list" class="class-list"></div>
+      </div>
+
+      <div class="panel-block">
+        <h3>Annotations <span class="count" id="shape-count">0</span></h3>
+        <div id="shape-list" class="shape-list"></div>
+      </div>
+
+      <div class="panel-block panel-warnings" id="warn-block" hidden>
+        <h3>Pipeline warnings</h3>
+        <ul id="warn-list"></ul>
+      </div>
+
+      <div class="panel-block">
+        <h3>Tuning</h3>
+        <div class="tune" data-key="MERGE_CLOSE_KERNEL_PX">
+          <label>Merge kernel <span class="tune-val"></span></label>
+          <input type="range" min="1" max="201" step="2">
+          <p class="tune-help">Bridges gaps around parked cars. Higher absorbs
+            islands; too high bulges over background.</p>
+        </div>
+        <div class="tune" data-key="MIN_CLASS_PROBABILITY">
+          <label>Min probability <span class="tune-val"></span></label>
+          <input type="range" min="0.05" max="0.95" step="0.05">
+          <p class="tune-help">Below this a pixel is left unlabelled.</p>
+        </div>
+        <div class="tune" data-key="POLYGON_EPSILON_RATIO">
+          <label>Simplification <span class="tune-val"></span></label>
+          <input type="range" min="0.0005" max="0.02" step="0.0005">
+          <p class="tune-help">Higher gives fewer vertices.</p>
+        </div>
+        <button class="btn btn-block" id="btn-reset-tune">Reset to config.py</button>
+      </div>
+
+      <div class="panel-block panel-help">
+        <h3>Shortcuts</h3>
+        <dl>
+          <dt>drag</dt><dd>move vertex</dd>
+          <dt>click edge</dt><dd>insert vertex</dd>
+          <dt>right-click</dt><dd>delete vertex</dd>
+          <dt>N</dt><dd>new polygon</dd>
+          <dt>Del</dt><dd>delete selected</dd>
+          <dt>A</dt><dd>approve + next</dd>
+          <dt>← →</dt><dd>prev / next image</dd>
+          <dt>F</dt><dd>fit to screen</dd>
+        </dl>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="filmstrip" id="filmstrip"></footer>
+</section>
+
+
+<!-- ══ EXPORT DIALOG ════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="export-modal" hidden>
+  <div class="modal">
+    <h2>Export CVAT annotations</h2>
+    <label class="radio">
+      <input type="radio" name="scope" value="approved" checked>
+      <span>Approved only <b id="x-approved">0</b></span>
+      <small>Only images you have signed off.</small>
+    </label>
+    <label class="radio">
+      <input type="radio" name="scope" value="annotated">
+      <span>All annotated <b id="x-annotated">0</b></span>
+      <small>Includes polygons nobody has reviewed yet.</small>
+    </label>
+    <p class="modal-note" id="x-note"></p>
+    <div class="modal-actions">
+      <button class="btn" id="btn-export-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-export-go">Export</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toasts"></div>
+
+<script src="/static/api.js"></script>
+<script src="/static/canvas.js"></script>
+<script src="/static/editor.js"></script>
+<script src="/static/gallery.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

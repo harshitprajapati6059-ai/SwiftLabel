@@ -1,0 +1,99 @@
+========================================================================
+ROAD ANNOTATOR — COMMAND REFERENCE
+========================================================================
+
+Project folder:
+  C:\Users\Harshit Prajapati\OneDrive\Desktop\Road\Road
+
+------------------------------------------------------------------------
+0. OPEN A TERMINAL IN THE PROJECT
+------------------------------------------------------------------------
+Open Command Prompt (cmd) and go to the project folder:
+
+    cd "C:\Users\Harshit Prajapati\OneDrive\Desktop\Road\Road"
+
+------------------------------------------------------------------------
+1. ACTIVATE THE VIRTUAL ENVIRONMENT (do this first, every session)
+------------------------------------------------------------------------
+In Command Prompt (cmd):
+
+    venv\Scripts\activate.bat
+
+In PowerShell:
+
+    .\venv\Scripts\Activate.ps1
+
+After this your prompt shows "(venv)" at the start.
+That is how you know the correct Python (with cv2, torch, transformers)
+is being used.
+
+------------------------------------------------------------------------
+2. RUN ON A SINGLE IMAGE
+------------------------------------------------------------------------
+    python test.py "images/Screenshot 2026-07-24 135002.png"
+
+Note: keep the quotes when the filename has spaces.
+
+------------------------------------------------------------------------
+3. RUN ON A WHOLE FOLDER (BATCH)
+------------------------------------------------------------------------
+    python batch.py ./images
+
+------------------------------------------------------------------------
+4. RUN WITHOUT ACTIVATING (call the venv python directly)
+------------------------------------------------------------------------
+    venv\Scripts\python.exe test.py "images/Screenshot 2026-07-24 135002.png"
+    venv\Scripts\python.exe batch.py ./images
+
+------------------------------------------------------------------------
+5. DEACTIVATE THE VIRTUAL ENVIRONMENT WHEN DONE
+------------------------------------------------------------------------
+    deactivate
+
+------------------------------------------------------------------------
+6. EXPORT FOR CVAT (no model needed, uses the last run's output)
+------------------------------------------------------------------------
+    python export_cvat.py
+
+Writes output/cvat_annotations.xml. The label "road" must already exist
+in your CVAT task before importing (Task -> Actions -> Edit labels),
+otherwise CVAT rejects the file.
+
+This reads what batch.py last wrote, so run batch.py FIRST whenever the
+images or any setting changed — otherwise you export stale polygons.
+
+------------------------------------------------------------------------
+WHERE THE RESULTS GO
+------------------------------------------------------------------------
+    output/masks/       -> <name>_mask.png    colour-coded classes
+                           <name>_labels.png  label map used by export_cvat
+    output/overlays/    -> original image with the class overlay (PNG)
+    output/polygons/    -> polygon coordinates + metadata (JSON)
+    output/cvat_annotations.xml -> CVAT import file
+    logs/pipeline.log   -> run log / telemetry
+
+------------------------------------------------------------------------
+WHAT IS ANNOTATED
+------------------------------------------------------------------------
+ONE class ("road"), ONE polygon per image. It covers the whole ground
+surface in one piece - carriageway, bike path, walkway and green area
+merged together. Cars, poles and people standing on that ground are
+covered over rather than cut around.
+
+The vehicle hood at the bottom of the frame is always excluded.
+
+Nothing painted on the road is annotated: no lane/dashed markings, no
+arrows or direction cues, no crosswalk stripes, no cracks.
+
+------------------------------------------------------------------------
+NOTES
+------------------------------------------------------------------------
+- The FIRST run downloads the SegFormer-B5 model weights into models\.
+  This is a few GB and can be slow. Later runs work fully offline.
+- This machine runs on CPU (torch ...+cpu), so a single image can take
+  a while to process. This is normal.
+- Verify the environment is healthy at any time:
+
+    python -c "import sys, cv2, torch, transformers; print(sys.executable); print(cv2.__version__)"
+
+========================================================================
